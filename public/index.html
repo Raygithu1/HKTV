@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#071320">
+    <title>HK OTA TV Guide</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header>
+      <div><p class="eyebrow">HONG KONG · OVER-THE-AIR</p><h1>TV Guide</h1></div>
+      <p id="updated" class="updated">Loading latest listings…</p>
+    </header>
+    <main>
+      <section class="toolbar" aria-label="Guide controls">
+        <div class="date-controls"><button id="previous" aria-label="Previous day">‹</button><input id="date" type="date"><button id="next" aria-label="Next day">›</button><button id="today">Today</button></div>
+        <label class="sort-label">Sort <select id="sort"><option value="number">Channel #</option><option value="name">Channel name</option></select></label>
+        <button id="manage" class="manage">Edit channels</button>
+      </section>
+      <section class="legend" aria-label="Programme colours"><span><i class="news"></i>News</span><span><i class="movie"></i>Movies</span><span><i class="sports"></i>Sport</span><span><i class="drama"></i>Drama</span><span><i class="lifestyle"></i>Lifestyle</span><span><i class="kids"></i>Kids</span></section>
+      <p id="empty" class="empty" hidden>No listings for this day. Try a different date.</p>
+      <div id="guide" class="guide" aria-live="polite"></div>
+    </main>
+    <dialog id="channel-dialog"><form method="dialog"><div class="dialog-heading"><div><p class="eyebrow">YOUR GUIDE</p><h2>Choose channels</h2></div><button aria-label="Close">×</button></div><p>Hidden channels stay hidden on this browser until you add them back.</p><div id="channel-list" class="channel-list"></div><div class="dialog-actions"><button id="all" type="button">Select all</button><button id="none" type="button">Clear all</button><button class="done">Done</button></div></form></dialog>
+    <footer>Schedule data: <a href="https://iptv-epg.org/" target="_blank" rel="noreferrer">IPTV-EPG.org</a> · Times shown in Hong Kong time (HKT).</footer>
+    <script src="app.js"></script>
+  </body>
+</html>
