@@ -3,28 +3,43 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#071320">
-    <title>HK OTA TV Guide</title>
+    <meta name="theme-color" content="#0f1115">
+    <title>Hong Kong OTA TV Guide</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <header>
-      <div><p class="eyebrow">HONG KONG · OVER-THE-AIR</p><h1>TV Guide</h1></div>
-      <p id="updated" class="updated">Loading latest listings…</p>
+    <header class="site-header">
+      <div class="brand">
+        <span class="brand-mark">HK</span>
+        <div>
+          <h1>Hong Kong TV Guide</h1>
+          <p class="subtitle">TVB OTA channels &middot; Hong Kong Time</p>
+        </div>
+      </div>
+      <div class="clock">
+        <div id="clock-time" class="clock-time">--:--</div>
+        <div id="clock-date" class="clock-date">Loading&hellip;</div>
+      </div>
     </header>
+
+    <nav id="day-nav" class="day-nav" aria-label="Day"></nav>
+
+    <div class="slider-bar">
+      <input id="time-slider" class="time-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Scroll timeline">
+    </div>
+
+    <div id="legend" class="legend"></div>
+
     <main>
-      <section class="toolbar" aria-label="Guide controls">
-        <div class="date-controls"><button id="previous" aria-label="Previous day">‹</button><input id="date" type="date"><button id="next" aria-label="Next day">›</button><button id="today">Today</button></div>
-        <label class="sort-label">Sort <select id="sort"><option value="number">Channel #</option><option value="name">Channel name</option></select></label>
-        <button id="manage" class="manage">Edit channels</button>
-      </section>
-      <section class="legend" aria-label="Programme colours"><span><i class="news"></i>News</span><span><i class="movie"></i>Movies</span><span><i class="sports"></i>Sport</span><span><i class="drama"></i>Drama</span><span><i class="lifestyle"></i>Lifestyle</span><span><i class="kids"></i>Kids</span><span class="translation-note">EN ↗ English title supplied by the guide; original Chinese is available on hover/tap.</span></section>
-      <p id="empty" class="empty" hidden>No listings for this day. Try a different date.</p>
-      <div class="timeline-shell"><div id="guide" class="guide" aria-live="polite"></div></div>
-      <section class="timeline-controls" aria-label="Timeline navigation"><span>Move through the day</span><input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Move left and right through the TV schedule"><span id="timeline-time">12:00 am</span></section>
+      <div id="status" class="status">Loading guide&hellip;</div>
+      <div id="guide" class="guide" hidden></div>
     </main>
-    <dialog id="channel-dialog"><form method="dialog"><div class="dialog-heading"><div><p class="eyebrow">YOUR GUIDE</p><h2>Choose channels</h2></div><button aria-label="Close">×</button></div><p>Hidden channels stay hidden on this browser until you add them back.</p><div id="channel-list" class="channel-list"></div><div class="dialog-actions"><button id="all" type="button">Select all</button><button id="none" type="button">Clear all</button><button class="done">Done</button></div></form></dialog>
-    <footer>Schedule data: <a href="https://iptv-epg.org/" target="_blank" rel="noreferrer">IPTV-EPG.org</a> · Times shown in Hong Kong time (HKT).</footer>
+
+    <footer class="site-footer">
+      <span id="generated">&nbsp;</span>
+      <span id="source"></span>
+    </footer>
+
     <script src="app.js"></script>
   </body>
 </html>

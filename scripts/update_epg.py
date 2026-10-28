@@ -26,6 +26,15 @@ OTA_CHANNELS = {
 }
 
 
+
+CHANNEL_COLORS = {
+    "TVBJade.hk": "#75e6c8",
+    "TVBJ2.hk": "#6dc9e8",
+    "TVBNewsChannel.hk": "#dd7d9d",
+    "TVBPearl.hk": "#b98bf3",
+    "TVBFinanceAndInformationChannel.hk": "#e9da67",
+}
+
 def text(element: ET.Element, tag: str, lang: str | None = None) -> str:
     choices = element.findall(tag)
     if lang:
@@ -79,6 +88,7 @@ def main() -> None:
             "number": number,
             "name": text(channel, "display-name").removeprefix("HK - ") or fallback_name,
             "icon": icon.get("src", "") if icon is not None else "",
+            "color": CHANNEL_COLORS.get(channel_id, "#6ea8fe"),
         })
 
     programmes = []
@@ -90,10 +100,14 @@ def main() -> None:
         title = title_en or title_zh or "Untitled programme"
         description = text(programme, "desc", "zh") or text(programme, "desc", "en")
         category = text(programme, "category", "en") or text(programme, "category")
+        start_iso = parse_time(programme.get("start", ""))
+        stop_iso = parse_time(programme.get("stop", ""))
         programmes.append({
             "channel": programme.get("channel"),
-            "start": parse_time(programme.get("start", "")),
-            "stop": parse_time(programme.get("stop", "")),
+            "start": start_iso,
+            "stop": stop_iso,
+            "start_ts": int(dt.datetime.fromisoformat(start_iso).timestamp()),
+            "stop_ts": int(dt.datetime.fromisoformat(stop_iso).timestamp()),
             "title": title,
             "originalTitle": title_zh if title_en and title_zh != title_en else "",
             "translated": bool(title_en and title_zh and title_en != title_zh),

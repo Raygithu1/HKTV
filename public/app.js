@@ -1,158 +1,300 @@
-const PX_PER_MINUTE = 2;
-const DAY_MINUTES = 1440;
-const state = { data: null, date: null, hidden: new Set(JSON.parse(localStorage.getItem('hk-guide-hidden') || '[]')), sort: localStorage.getItem('hk-guide-sort') || 'number' };
-const $ = (selector) => document.querySelector(selector);
-const hktDate = (value) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Hong_Kong' }).format(new Date(value));
-const time = (value) => new Intl.DateTimeFormat('en-HK', { timeZone: 'Asia/Hong_Kong', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
+(function () {
+  "use strict";
 
-function save() { localStorage.setItem('hk-guide-hidden', JSON.stringify([...state.hidden])); }
-function hktMinutes(value) {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Hong_Kong', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(value));
-  const h = parseInt(parts.find(p => p.type === 'hour').value, 10);
-  const m = parseInt(parts.find(p => p.type === 'minute').value, 10);
-  return h * 60 + m;
-}
-function formatHour(h) {
-  const suffix = h < 12 ? 'am' : 'pm';
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}${suffix}`;
-}
-function format12(mins) {
-  const clamped = Math.max(0, Math.min(mins, DAY_MINUTES));
-  const h = Math.floor(clamped / 60) % 24;
-  const m = clamped % 60;
-  const suffix = h < 12 ? 'am' : 'pm';
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`;
-}
-function renderChannels() {
-  const list = $('#channel-list'); list.replaceChildren();
-  state.data.channels.forEach(channel => {
-    const label = document.createElement('label');
-    label.innerHTML = `<input type="checkbox" ${state.hidden.has(channel.id) ? '' : 'checked'}> <strong>${channel.number}</strong> ${channel.name}`;
-    label.querySelector('input').onchange = event => { event.target.checked ? state.hidden.delete(channel.id) : state.hidden.add(channel.id); save(); renderGuide(); };
-    list.append(label);
+  var TZ = "Asia/Hong_Kong";
+  var PPM = 2.4;
+  var DATA = null;
+  var days = [];
+  var selected = null;
+
+  var partsFmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
   });
-}
-function renderGuide() {
-  const guide = $('#guide'); guide.replaceChildren();
-  const shell = guide.parentElement;
-  const channels = state.data.channels.filter(c => !state.hidden.has(c.id)).sort((a, b) => state.sort === 'name' ? a.name.localeCompare(b.name) : a.number - b.number);
-  const programmes = state.data.programmes.filter(p => hktDate(p.start) === state.date);
-  const hasProgrammes = channels.length > 0 && programmes.length > 0;
-  $('#empty').hidden = hasProgrammes;
-  if (!hasProgrammes) {
-    setupTimelineSlider(shell, guide);
-    return;
+  var dateFmt = new Intl.DateTimeFormat("en-HK", {
+    timeZone: TZ, dateStyle: "medium"
+  });
+  var timeFmtShort = new Intl.DateTimeFormat("en-HK", {
+    timeZone: TZ, hour: "numeric", minute: "2-digit"
+  });
+  var fullFmt = new Intl.DateTimeFormat("en-HK", {
+    timeZone: TZ, weekday: "short", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit"
+  });
+
+  function pt(o) {
+    return {
+      y: +o.year, mo: +o.month, d: +o.day,
+      h: +o.hour % 24, mi: +o.minute, s: +o.second
+    };
+  }
+  function ptParts(date) {
+    var o = {};
+    partsFmt.formatToParts(date).forEach(function (p) { o[p.type] = p.value; });
+    return pt(o);
+  }
+  function tzOffsetMs(utcMs) {
+    var p = ptParts(new Date(utcMs));
+    var asUtc = Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s);
+    return asUtc - utcMs;
+  }
+  function ptWallToUtc(y, mo, d, h, mi) {
+    var ms = Date.UTC(y, mo - 1, d, h, mi, 0);
+    for (var i = 0; i < 3; i++) {
+      ms = Date.UTC(y, mo - 1, d, h, mi, 0) - tzOffsetMs(ms);
+    }
+    return ms;
+  }
+  function dayKey(ts) {
+    var p = ptParts(new Date(ts));
+    return p.y + "-" + pad(p.mo) + "-" + pad(p.d);
+  }
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  function todayKey() { return dayKey(Date.now()); }
+  function dayObj(key) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+    return { key: key, y: +m[1], mo: +m[2], d: +m[3] };
+  }
+  function isToday(key) { return key === todayKey(); }
+
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
   }
 
-  const ruler = document.createElement('div');
-  ruler.className = 'timeline-ruler';
-  const rulerLabel = document.createElement('div');
-  rulerLabel.className = 'ruler-label';
-  rulerLabel.textContent = 'CHANNEL';
-  ruler.append(rulerLabel);
-  const rulerTrack = document.createElement('div');
-  rulerTrack.className = 'track ruler-track';
-  rulerTrack.style.width = `${DAY_MINUTES * PX_PER_MINUTE}px`;
-  for (let h = 0; h < 24; h++) {
-    const hour = document.createElement('div');
-    hour.className = 'hour';
-    hour.style.left = `${h * 60 * PX_PER_MINUTE}px`;
-    hour.textContent = formatHour(h);
-    rulerTrack.append(hour);
+  function $ (sel) { return document.querySelector(sel); }
+
+  function tickClock() {
+    var now = new Date();
+    var p = ptParts(now);
+    var h12 = ((p.h + 11) % 12) + 1;
+    var ampm = p.h < 12 ? "AM" : "PM";
+    $("#clock-time").textContent =
+      h12 + ":" + pad(p.mi) + ":" + pad(p.s) + " " + ampm;
+    $("#clock-date").textContent = dateFmt.format(now) + " HKT";
   }
-  ruler.append(rulerTrack);
-  guide.append(ruler);
 
-  const today = hktDate(new Date());
-  const isToday = state.date === today;
+  function buildDays() {
+    var set = {};
+    DATA.programmes.forEach(function (p) {
+      set[dayKey(p.start_ts * 1000)] = true;
+      set[dayKey(p.stop_ts * 1000)] = true;
+    });
+    days = Object.keys(set).sort().slice(0, 7);
+    var now = todayKey();
+    selected = days.indexOf(now) !== -1 ? now : (days[0] || now);
+  }
 
-  channels.forEach(channel => {
-    const row = document.createElement('article'); row.className = 'channel';
-    const info = document.createElement('div'); info.className = 'channel-info';
-    info.innerHTML = `${channel.icon ? `<img class="channel-icon" src="${channel.icon}" alt="">` : ''}<span class="number">${channel.number}</span><span class="channel-name">${channel.name}</span>`;
-    row.append(info);
+  function renderNav() {
+    var nav = $("#day-nav");
+    nav.innerHTML = "";
+    days.forEach(function (key) {
+      var d = dayObj(key);
+      var label;
+      if (isToday(key)) label = "Today";
+      else label = fullFmt.format(new Date(Date.UTC(d.y, d.mo - 1, d.d, 12)));
+      var btn = el("button", "day-btn" + (key === selected ? " active" : ""), label);
+      btn.addEventListener("click", function () {
+        selected = key;
+        renderNav();
+        render();
+      });
+      nav.appendChild(btn);
+    });
+    if (!nav.childElementCount) {
+      var d = dayObj(days[0] || todayKey());
+      var b = el("button", "day-btn active", fullFmt.format(new Date(Date.UTC(d.y, d.mo - 1, d.d, 12))));
+      nav.appendChild(b);
+    }
+  }
 
-    const track = document.createElement('div'); track.className = 'track';
-    track.style.width = `${DAY_MINUTES * PX_PER_MINUTE}px`;
+  function renderLegend() {
+    var legend = $("#legend");
+    legend.innerHTML = "";
+    var wrap = el("div");
+    var nowSpan = el("span", "cur", "\u25CF Now");
+    wrap.appendChild(nowSpan);
+    var timeSpan = el("span", null, "All times Hong Kong");
+    wrap.appendChild(timeSpan);
+    legend.appendChild(wrap);
+  }
 
-    const shows = programmes.filter(p => p.channel === channel.id);
-    shows.forEach(show => {
-      const item = document.createElement('div');
-      item.className = `programme type-${show.category}`;
-      const startMin = hktMinutes(show.start);
-      let stopMin = hktMinutes(show.stop);
-      if (stopMin <= startMin) stopMin += DAY_MINUTES;
-      const clampedStop = Math.min(stopMin, DAY_MINUTES);
-      const left = startMin * PX_PER_MINUTE;
-      const width = Math.max((clampedStop - startMin) * PX_PER_MINUTE, 18);
-      item.style.left = `${left}px`;
-      item.style.width = `${width}px`;
-      if (show.originalTitle) item.title = show.originalTitle;
+  function shade(hex, amt) {
+    var c = (hex || "#333").replace("#", "");
+    if (c.length === 3) c = c.replace(/./g, function (x) { return x + x; });
+    var num = parseInt(c, 16);
+    if (isNaN(num)) num = 0x333333;
+    var r = Math.round((num >> 16) * (1 - amt) + 18 * amt);
+    var g = Math.round(((num >> 8) & 0xff) * (1 - amt) + 22 * amt);
+    var b = Math.round((num & 0xff) * (1 - amt) + 26 * amt);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
 
-      item.innerHTML = `<div class="programme-time">${time(show.start)} – ${time(show.stop)}</div><div class="programme-title"></div>${show.description ? '<p class="programme-description"></p>' : ''}`;
-      const titleEl = item.querySelector('.programme-title');
-      titleEl.textContent = show.title;
-      if (show.translated) {
-        const badge = document.createElement('span');
-        badge.className = 'translated';
-        badge.textContent = 'EN';
-        titleEl.append(badge);
+  function syncSlider() {
+    var guideEl = $("#guide");
+    var sliderEl = $("#time-slider");
+    if (!guideEl || !sliderEl) return;
+    var max = guideEl.scrollWidth - guideEl.clientWidth;
+    if (max < 0) max = 0;
+    sliderEl.max = max;
+    sliderEl.value = guideEl.scrollLeft;
+    sliderEl.disabled = max === 0;
+  }
+
+  function render() {
+    var guide = $("#guide");
+    guide.innerHTML = "";
+    guide.hidden = false;
+    $("#status").hidden = true;
+
+    var day = dayObj(selected);
+    var midnight = ptWallToUtc(day.y, day.mo, day.d, 0, 0);
+    var nextMid = ptWallToUtc(day.y, day.mo, day.d, 24, 0);
+    var dayLenMin = (nextMid - midnight) / 60000;
+    var trackW = Math.round(dayLenMin * PPM);
+    var now = Date.now();
+
+    // Ruler row
+    var rulerRow = el("div", "ruler-row");
+    var chCorner = el("div", "ch-col ruler-corner", "Channel");
+    rulerRow.appendChild(chCorner);
+    var numCorner = el("div", "num-col ruler-corner", "No.");
+    rulerRow.appendChild(numCorner);
+    var ruler = el("div", "ruler");
+    ruler.style.width = trackW + "px";
+    var hours = Math.round(dayLenMin / 60);
+    for (var h = 0; h < hours; h++) {
+      var tick = el("div", "tick");
+      tick.style.left = Math.round(h * 60 * PPM) + "px";
+      var lab = el("span", null, timeFmtShort.format(new Date(midnight + h * 3600000)));
+      tick.appendChild(lab);
+      ruler.appendChild(tick);
+    }
+    rulerRow.appendChild(ruler);
+    guide.appendChild(rulerRow);
+
+    DATA.channels.forEach(function (ch) {
+      var row = el("div", "chan-row");
+      var col = el("div", "ch-col");
+      var swatch = document.createElement("span");
+      swatch.style.cssText = "width:10px;height:100%;min-height:34px;border-radius:3px;flex:none;background:" +
+        (ch.color || "#555") + ";";
+      col.appendChild(swatch);
+      var name = el("div", "ch-name");
+      name.appendChild(el("div", "", ch.name));
+      col.appendChild(name);
+      row.appendChild(col);
+      row.appendChild(el("div", "num-col", ch.number));
+
+      var track = el("div", "track");
+      track.style.width = trackW + "px";
+
+      if (now >= midnight && now < nextMid) {
+        var line = el("div", "now-line");
+        line.style.left = Math.max(0, Math.round(((now - midnight) / 60000) * PPM)) + "px";
+        track.appendChild(line);
       }
-      const desc = item.querySelector('.programme-description');
-      if (desc) desc.textContent = show.description;
-      track.append(item);
+
+      DATA.programmes
+        .filter(function (p) { return p.channel === ch.id && p.stop_ts * 1000 > midnight && p.start_ts * 1000 < nextMid; })
+        .sort(function (a, b) { return a.start_ts - b.start_ts; })
+        .forEach(function (p) {
+          var s = Math.max(p.start_ts * 1000, midnight);
+          var e = Math.min(p.stop_ts * 1000, nextMid);
+          var left = Math.round(((s - midnight) / 60000) * PPM);
+          var width = Math.max(3, Math.round(((e - s) / 60000) * PPM));
+          var block = el("div", "prog");
+          block.style.left = left + "px";
+          block.style.width = width + "px";
+          var hue = ch.color || "#333";
+          block.style.background = shade(hue, 0.25);
+          block.style.borderLeft = "3px solid " + hue;
+          var title = el("div", "p-title", p.title || "(no title)");
+          if (p.translated) {
+            var badge = el("span", "translated", "EN");
+            title.appendChild(badge);
+          }
+          block.appendChild(title);
+          if (width > 130) {
+            var meta = el("div", "p-meta");
+            var m = timeFmtShort.format(new Date(p.start_ts * 1000)) + " \u2013 " + timeFmtShort.format(new Date(p.stop_ts * 1000));
+            if (p.originalTitle) m += " \u00b7 " + p.originalTitle;
+            if (p.category) m += " \u00b7 " + p.category;
+            meta.textContent = m;
+            block.appendChild(meta);
+          }
+          var tip = p.title;
+          if (p.originalTitle) tip += "\n" + p.originalTitle;
+          if (p.description) tip += "\n" + p.description;
+          block.title = tip;
+          track.appendChild(block);
+        });
+
+      row.appendChild(track);
+      guide.appendChild(row);
     });
 
-    if (isToday) {
-      const nowMin = hktMinutes(new Date().toISOString());
-      const nowLine = document.createElement('div');
-      nowLine.className = 'now-line';
-      nowLine.style.left = `${nowMin * PX_PER_MINUTE}px`;
-      track.append(nowLine);
+    guide.hidden = false;
+    if (now >= midnight && now < nextMid) {
+      guide.scrollLeft = Math.max(0, Math.round(((now - midnight) / 60000) * PPM) - 160);
     }
+    syncSlider();
+  }
 
-    row.append(track);
-    guide.append(row);
-  });
+  function init() {
+    PPM = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ppm")) || PPM;
+    tickClock();
+    setInterval(tickClock, 1000);
 
-  setupTimelineSlider(shell, guide);
-}
-function changeDate(days) { const d = new Date(`${state.date}T12:00:00+08:00`); d.setUTCDate(d.getUTCDate() + days); state.date = hktDate(d); $('#date').value = state.date; renderGuide(); }
-function setupTimelineSlider(shell, guide) {
-  const slider = $('#timeline');
-  const timeLabel = $('#timeline-time');
-  const updateTime = (scrollLeft) => {
-    const mins = Math.round(scrollLeft / PX_PER_MINUTE);
-    timeLabel.textContent = format12(Math.max(0, Math.min(mins, DAY_MINUTES)));
-  };
-  const measure = () => {
-    const maxScroll = Math.max(0, shell.scrollWidth - shell.clientWidth);
-    slider.max = maxScroll;
-    const current = parseInt(slider.value, 10) || 0;
-    if (current > maxScroll) slider.value = maxScroll;
-  };
-  shell.scrollLeft = 0;
-  slider.value = 0;
-  measure();
-  updateTime(0);
-  requestAnimationFrame(() => { measure(); updateTime(shell.scrollLeft); });
-  if (shell._ro) shell._ro.disconnect();
-  const ro = new ResizeObserver(measure);
-  ro.observe(shell);
-  shell._ro = ro;
-  shell.onscroll = () => { slider.value = shell.scrollLeft; updateTime(shell.scrollLeft); };
-  slider.oninput = () => { shell.scrollLeft = parseInt(slider.value, 10) || 0; updateTime(shell.scrollLeft); };
-}
-async function init() {
-  const response = await fetch('data/guide.json'); state.data = await response.json();
-  const today = hktDate(new Date()); const dates = [...new Set(state.data.programmes.map(p => hktDate(p.start)))].sort();
-  state.date = dates.includes(today) ? today : dates[0]; $('#date').value = state.date; $('#sort').value = state.sort;
-  $('#updated').textContent = `Updated ${new Intl.DateTimeFormat('en-HK', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Hong_Kong' }).format(new Date(state.data.generatedAt))} HKT`;
-  $('#date').onchange = event => { state.date = event.target.value; renderGuide(); }; $('#previous').onclick = () => changeDate(-1); $('#next').onclick = () => changeDate(1); $('#today').onclick = () => { state.date = dates.includes(today) ? today : dates[0]; $('#date').value = state.date; renderGuide(); };
-  $('#sort').onchange = event => { state.sort = event.target.value; localStorage.setItem('hk-guide-sort', state.sort); renderGuide(); };
-  $('#manage').onclick = () => { renderChannels(); $('#channel-dialog').showModal(); }; $('#all').onclick = () => { state.hidden.clear(); save(); renderChannels(); renderGuide(); }; $('#none').onclick = () => { state.data.channels.forEach(c => state.hidden.add(c.id)); save(); renderChannels(); renderGuide(); };
-  renderGuide();
-}
-init().catch(() => { $('#updated').textContent = 'Could not load guide data.'; });
+    var guideEl = $("#guide");
+    var sliderEl = $("#time-slider");
+    if (sliderEl) {
+      sliderEl.addEventListener("input", function () {
+        guideEl.scrollLeft = +sliderEl.value;
+      });
+    }
+    if (guideEl) {
+      guideEl.addEventListener("scroll", function () {
+        if (sliderEl) sliderEl.value = guideEl.scrollLeft;
+      });
+    }
+    window.addEventListener("resize", syncSlider);
+
+    fetch("data/guide.json")
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        DATA = data;
+        var foot = $("#source");
+        var a = document.createElement("a");
+        a.textContent = "Data: " + (data.source && data.source.name ? data.source.name : "IPTV-EPG.org");
+        a.href = data.source && data.source.url ? data.source.url : "https://iptv-epg.org/";
+        a.target = "_blank";
+        a.style.color = "inherit";
+        foot.innerHTML = "";
+        foot.appendChild(a);
+        $("#generated").textContent =
+          "Updated " + new Intl.DateTimeFormat("en-HK", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Hong_Kong" }).format(new Date(data.generatedAt)) + " HKT";
+
+        if (!data.programmes.length) {
+          $("#status").textContent = "No schedule data available. Run the guide builder to refresh guide.json.";
+          return;
+        }
+        buildDays();
+        renderNav();
+        renderLegend();
+        render();
+      })
+      .catch(function (err) {
+        $("#status").textContent = "Could not load the guide: " + err.message;
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
