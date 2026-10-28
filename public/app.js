@@ -135,7 +135,9 @@ function setupTimelineSlider(shell, guide) {
   };
   shell.scrollLeft = 0;
   slider.value = 0;
-  requestAnimationFrame(() => { measure(); updateTime(0); });
+  measure();
+  updateTime(0);
+  requestAnimationFrame(() => { measure(); updateTime(shell.scrollLeft); });
   if (shell._ro) shell._ro.disconnect();
   const ro = new ResizeObserver(measure);
   ro.observe(shell);
