@@ -85,7 +85,9 @@ def main() -> None:
     for programme in root.findall("programme"):
         if programme.get("channel") not in OTA_CHANNELS:
             continue
-        title = text(programme, "title", "zh") or text(programme, "title", "en") or "Untitled programme"
+        title_zh = text(programme, "title", "zh")
+        title_en = text(programme, "title", "en")
+        title = title_en or title_zh or "Untitled programme"
         description = text(programme, "desc", "zh") or text(programme, "desc", "en")
         category = text(programme, "category", "en") or text(programme, "category")
         programmes.append({
@@ -93,6 +95,8 @@ def main() -> None:
             "start": parse_time(programme.get("start", "")),
             "stop": parse_time(programme.get("stop", "")),
             "title": title,
+            "originalTitle": title_zh if title_en and title_zh != title_en else "",
+            "translated": bool(title_en and title_zh and title_en != title_zh),
             "description": description,
             "category": program_type(title, description, category),
         })
